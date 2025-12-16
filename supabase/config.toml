@@ -1,1 +1,10 @@
 project_id = "hgbnmrhzxewziagjdjke"
+
+# Configuração para tornar github-oauth-callback pública (sem autenticação JWT)
+# Necessário porque o callback é chamado diretamente pelo GitHub
+[functions.github-oauth-callback]
+verify_jwt = false
+
+# github-webhooks também é público (chamado pelo GitHub)
+[functions.github-webhooks]
+verify_jwt = false

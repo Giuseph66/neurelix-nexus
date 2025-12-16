@@ -33,7 +33,11 @@ import {
   GitBranch,
   Layout,
   Send,
+  Code2,
+  GitPullRequest,
+  GitCommit,
 } from 'lucide-react';
+import { useTarefaGitLinks } from '@/hooks/useTarefaGitLinks';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -46,6 +50,7 @@ export function TarefaDetailModal({ tarefaId, onClose }: TarefaDetailModalProps)
   const { data: tarefa, isLoading: tarefaLoading } = useTarefa(tarefaId || undefined);
   const { data: comments, isLoading: commentsLoading } = useTarefaComments(tarefaId || undefined);
   const { data: activity, isLoading: activityLoading } = useTarefaActivity(tarefaId || undefined);
+  const { data: gitLinksData, isLoading: gitLinksLoading } = useTarefaGitLinks(tarefaId || undefined);
   
   const updateTarefa = useUpdateTarefa();
   const createComment = useCreateComment();
@@ -174,6 +179,96 @@ export function TarefaDetailModal({ tarefaId, onClose }: TarefaDetailModalProps)
                     </div>
                   </div>
                 )}
+
+                {/* Código (GitHub) */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Code2 className="h-4 w-4" />
+                    Código (GitHub)
+                  </h3>
+                  {gitLinksLoading ? (
+                    <Skeleton className="h-20 w-full" />
+                  ) : gitLinksData?.links && gitLinksData.links.length > 0 ? (
+                    <div className="space-y-2">
+                      {gitLinksData.links.map((link) => (
+                        <div
+                          key={link.id}
+                          className="p-3 bg-muted/50 rounded-lg border border-border hover:bg-muted transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              {link.repo && (
+                                <div className="text-sm font-medium mb-1 truncate">
+                                  {link.repo.fullName}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {link.branch && (
+                                  <div className="flex items-center gap-1">
+                                    <GitBranch className="h-3 w-3" />
+                                    <span className="font-mono">{link.branch}</span>
+                                  </div>
+                                )}
+                                {link.commitSha && (
+                                  <div className="flex items-center gap-1">
+                                    <GitCommit className="h-3 w-3" />
+                                    <span className="font-mono">{link.commitSha.substring(0, 7)}</span>
+                                  </div>
+                                )}
+                                {link.pr && (
+                                  <div className="flex items-center gap-1">
+                                    <GitPullRequest className="h-3 w-3" />
+                                    <span>PR #{link.pr.number}</span>
+                                    <Badge
+                                      variant={
+                                        link.pr.state === 'MERGED'
+                                          ? 'default'
+                                          : link.pr.state === 'CLOSED'
+                                          ? 'secondary'
+                                          : 'outline'
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {link.pr.state}
+                                    </Badge>
+                                  </div>
+                                )}
+                                {link.autoLinked && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Auto-link
+                                  </Badge>
+                                )}
+                              </div>
+                              {link.pr && (
+                                <div className="text-xs text-muted-foreground mt-1 truncate">
+                                  {link.pr.title}
+                                </div>
+                              )}
+                            </div>
+                            {link.url && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(link.url!, '_blank')}
+                                className="shrink-0"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-lg">
+                      Nenhum vínculo com código encontrado.
+                      <br />
+                      <span className="text-xs">
+                        Crie branches, commits ou PRs com <code className="px-1 py-0.5 bg-muted rounded">TSK-{tarefa.key.split('-')[1]}</code> no nome para auto-link.
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Tabs for Comments and Activity */}
                 <Tabs defaultValue="comments">
