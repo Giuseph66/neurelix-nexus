@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useParams, Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Plus, GitBranch, GitPullRequest, Code2, Settings, AlertCircle, X } from 'lucide-react';
+import { Plus, GitBranch, GitPullRequest, Code2, Settings, AlertCircle, X, ChevronRight } from 'lucide-react';
 import { ConnectGitWizard } from '@/components/codigo/ConnectGitWizard';
 import { RepoCatalog } from '@/components/codigo/RepoCatalog';
 import { CodeBrowser } from '@/components/codigo/CodeBrowser';
 import { SelectReposPage } from '@/components/codigo/SelectReposPage';
+import { PRList } from '@/components/codigo/PRList';
+import { PRDetail } from '@/components/codigo/PRDetail';
+import { ReviewInbox } from '@/components/codigo/ReviewInbox';
+import { CodeSettings } from '@/components/codigo/CodeSettings';
 import { useGitHubConnection } from '@/hooks/useGitHubOAuth';
 import { useSelectedRepos } from '@/hooks/useSelectRepos';
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { useReviewInbox } from '@/hooks/usePRs';
+import { Badge } from '@/components/ui/badge';
+import { useLocation } from 'react-router-dom';
 
 export default function Code() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -21,10 +30,64 @@ export default function Code() {
   
   const { data: connection, isLoading: connectionLoading, refetch: refetchConnection } = useGitHubConnection(projectId);
   const { data: selectedReposData } = useSelectedRepos(projectId);
-  // Verificar se connected é true
-  // Se connection existe mas connected é false, pode ser que a conexão não foi encontrada
+  const location = useLocation();
+  
   const hasConnection = connection?.connected === true;
   const hasSelectedRepos = (selectedReposData?.repos || []).length > 0;
+  
+  // Obter repositório ativo do localStorage ou da URL
+  const getActiveRepoId = () => {
+    if (!projectId) return null;
+    // Tentar obter da URL primeiro
+    const urlMatch = location.pathname.match(/\/code\/repos\/([^/]+)/);
+    if (urlMatch) {
+      const repoId = urlMatch[1];
+      const key = `active-repo-${projectId}`;
+      localStorage.setItem(key, repoId);
+      return repoId;
+    }
+    // Se não estiver na URL, buscar do localStorage
+    const key = `active-repo-${projectId}`;
+    return localStorage.getItem(key);
+  };
+  
+  const activeRepoId = getActiveRepoId();
+  
+  // Buscar reviews do repositório ativo
+  const { data: reviewInboxData } = useReviewInbox(projectId);
+  
+  // Calcular PRs abertos do repositório ativo
+  const { data: activeRepo } = useQuery({
+    queryKey: ['repo', activeRepoId],
+    queryFn: async () => {
+      if (!activeRepoId || !selectedReposData?.repos) return null;
+      return selectedReposData.repos.find((r: any) => r.id === activeRepoId);
+    },
+    enabled: !!activeRepoId && !!selectedReposData,
+  });
+  
+  const openPRsCount = activeRepo?.open_prs_count || 0;
+  
+  // Calcular reviews pendentes do repositório ativo (simplificado por enquanto)
+  const pendingReviewsCount = 0; // TODO: Implementar contador por repositório
+  
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
+  usePageTitle("Código", project?.name);
   
   // Verificar se veio do callback OAuth
   const connected = searchParams.get('connected') === 'true';
@@ -70,6 +133,16 @@ export default function Code() {
       }
     }
   }, [errorMessage, connected, searchParams, setSearchParams]);
+  
+  // Redirecionar para settings se não houver repositório ativo e não estiver já em settings
+  useEffect(() => {
+    if (projectId && hasSelectedRepos && !activeRepoId && !location.pathname.includes('/code/settings')) {
+      navigate(`/project/${projectId}/code/settings`, { replace: true });
+    } else if (projectId && !hasSelectedRepos && !location.pathname.includes('/code/settings') && !location.pathname.includes('/code/select-repos')) {
+      // Se não tem repositórios selecionados, ir para settings
+      navigate(`/project/${projectId}/code/settings`, { replace: true });
+    }
+  }, [projectId, hasSelectedRepos, activeRepoId, location.pathname, navigate]);
 
   if (!projectId) {
     return <div>Projeto não encontrado</div>;
@@ -79,24 +152,61 @@ export default function Code() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="border-b bg-background">
-        <div className="flex items-center justify-between px-4 py-3">
+        {/* Breadcrumb: Projeto > Repositório */}
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{project?.name || 'Projeto'}</span>
+            {activeRepo && (
+              <>
+                <ChevronRight className="h-4 w-4" />
+                <span className="font-medium text-foreground">{activeRepo.full_name}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-4 pb-3">
           <div className="flex items-center gap-4">
-            <Tabs defaultValue="repos" className="w-auto">
-              <TabsList>
-                <TabsTrigger value="repos" onClick={() => navigate(`/project/${projectId}/code`)}>
-                  <Code2 className="h-4 w-4 mr-2" />
-                  Repositórios
-                </TabsTrigger>
-                <TabsTrigger value="prs" onClick={() => navigate(`/project/${projectId}/code/prs`)}>
-                  <GitPullRequest className="h-4 w-4 mr-2" />
-                  Pull Requests
-                </TabsTrigger>
-                <TabsTrigger value="reviews" onClick={() => navigate(`/project/${projectId}/code/reviews`)}>
-                  <GitBranch className="h-4 w-4 mr-2" />
-                  Reviews
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {activeRepoId ? (
+              <Tabs defaultValue="code" className="w-auto">
+                <TabsList>
+                  <TabsTrigger 
+                    value="code" 
+                    onClick={() => navigate(`/project/${projectId}/code/repos/${activeRepoId}`)}
+                  >
+                    <Code2 className="h-4 w-4 mr-2" />
+                    Código
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="prs" 
+                    onClick={() => navigate(`/project/${projectId}/code/repos/${activeRepoId}/pull-requests`)}
+                  >
+                    <GitPullRequest className="h-4 w-4 mr-2" />
+                    Pull Requests
+                    {openPRsCount > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {openPRsCount}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="reviews" 
+                    onClick={() => navigate(`/project/${projectId}/code/repos/${activeRepoId}/reviews`)}
+                  >
+                    <GitBranch className="h-4 w-4 mr-2" />
+                    Reviews
+                    {pendingReviewsCount > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {pendingReviewsCount}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Selecione um repositório nas configurações
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -171,7 +281,16 @@ export default function Code() {
         )}
 
         <Routes>
-          <Route index element={<Navigate to="repos" replace />} />
+          <Route 
+            index 
+            element={
+              activeRepoId ? (
+                <Navigate to={`repos/${activeRepoId}`} replace />
+              ) : (
+                <Navigate to="settings" replace />
+              )
+            } 
+          />
           <Route
             path="repos"
             element={
@@ -260,42 +379,42 @@ export default function Code() {
             }
           />
           <Route
-            path="prs"
+            path="repos/:repoId/pull-requests"
             element={
-              <div className="h-full p-6">
-                <div className="text-center text-muted-foreground">
-                  Pull Requests - Em desenvolvimento
-                </div>
+              <div className="h-full">
+                <PRList />
               </div>
             }
           />
-          <Route
-            path="prs/:prId"
-            element={
-              <div className="h-full p-6">
-                <div className="text-center text-muted-foreground">
-                  PR Detail - Em desenvolvimento
-                </div>
-              </div>
-            }
-          />
-          <Route
-            path="reviews"
-            element={
-              <div className="h-full p-6">
-                <div className="text-center text-muted-foreground">
-                  Code Review Inbox - Em desenvolvimento
-                </div>
-              </div>
-            }
-          />
+              <Route
+                path="repos/:repoId/pull-requests/:prNumber"
+                element={
+                  <div className="h-full">
+                    <PRDetail />
+                  </div>
+                }
+              />
+              <Route
+                path="repos/:repoId/reviews"
+                element={
+                  <div className="h-full">
+                    <ReviewInbox />
+                  </div>
+                }
+              />
+              <Route
+                path="reviews/inbox"
+                element={
+                  <div className="h-full">
+                    <ReviewInbox />
+                  </div>
+                }
+              />
           <Route
             path="settings"
             element={
-              <div className="h-full p-6">
-                <div className="text-center text-muted-foreground">
-                  Configurações Git - Em desenvolvimento
-                </div>
+              <div className="h-full">
+                <CodeSettings />
               </div>
             }
           />

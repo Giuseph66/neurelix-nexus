@@ -17,10 +17,54 @@ export function useRealtimeWhiteboard({
 }: UseRealtimeWhiteboardOptions) {
   const isLocalChangeRef = useRef(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const canvasRef = useRef(canvas);
+
+  // Keep canvas ref updated
+  useEffect(() => {
+    canvasRef.current = canvas;
+  }, [canvas]);
+
+  // Load objects from database
+  const loadObjectsFromDB = useCallback(async () => {
+    const currentCanvas = canvasRef.current;
+    if (!whiteboardId || !currentCanvas) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('whiteboard_objects')
+        .select('*')
+        .eq('whiteboard_id', whiteboardId)
+        .order('z_index', { ascending: true });
+
+      if (error) throw error;
+
+      console.log('[Realtime] Loading', data?.length || 0, 'objects from DB');
+
+      // Clear and reload canvas
+      currentCanvas.clear();
+      currentCanvas.backgroundColor = "#1e293b";
+
+      if (data && data.length > 0) {
+        const jsonObjects = data.map(obj => obj.properties);
+        
+        // Use loadFromJSON to restore objects
+        await currentCanvas.loadFromJSON({ 
+          objects: jsonObjects,
+          background: "#1e293b"
+        }, () => {
+          currentCanvas.renderAll();
+        });
+      } else {
+        currentCanvas.renderAll();
+      }
+    } catch (error) {
+      console.error('[Realtime] Error loading objects:', error);
+    }
+  }, [whiteboardId]);
 
   // Subscribe to realtime changes
   useEffect(() => {
-    if (!whiteboardId || !enabled) return;
+    if (!whiteboardId || !enabled || !canvas) return;
 
     console.log('[Realtime] Subscribing to whiteboard:', whiteboardId);
 
@@ -67,44 +111,7 @@ export function useRealtimeWhiteboard({
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [whiteboardId, enabled]);
-
-  // Load objects from database
-  const loadObjectsFromDB = useCallback(async () => {
-    if (!whiteboardId || !canvas) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('whiteboard_objects')
-        .select('*')
-        .eq('whiteboard_id', whiteboardId)
-        .order('z_index', { ascending: true });
-
-      if (error) throw error;
-
-      console.log('[Realtime] Loading', data?.length || 0, 'objects from DB');
-
-      // Clear and reload canvas
-      canvas.clear();
-      canvas.backgroundColor = "#1e293b";
-
-      if (data && data.length > 0) {
-        const jsonObjects = data.map(obj => obj.properties);
-        
-        // Use loadFromJSON to restore objects
-        await canvas.loadFromJSON({ 
-          objects: jsonObjects,
-          background: "#1e293b"
-        }, () => {
-          canvas.renderAll();
-        });
-      } else {
-        canvas.renderAll();
-      }
-    } catch (error) {
-      console.error('[Realtime] Error loading objects:', error);
-    }
-  }, [whiteboardId, canvas]);
+  }, [whiteboardId, enabled, loadObjectsFromDB]);
 
   // Save objects to database with local flag
   const saveObjectsRealtime = useCallback(async (objects: FabricObject[]) => {

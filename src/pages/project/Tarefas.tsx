@@ -8,6 +8,7 @@ import { BacklogView } from '@/components/tarefas/BacklogView';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, LayoutDashboard, List } from 'lucide-react';
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function Tarefas() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -31,6 +32,8 @@ export default function Tarefas() {
     },
     enabled: !!projectId,
   });
+
+  usePageTitle("Tarefas", project?.name);
 
   const handleSelectBoard = (boardId: string) => {
     setSearchParams({ board: boardId, view: activeTab });

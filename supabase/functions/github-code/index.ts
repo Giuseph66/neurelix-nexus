@@ -70,6 +70,12 @@ serve(async (req) => {
       return await handleGetCommits(req, repoId, userId);
     }
 
+    // GET /repos/:repoId/compare
+    if (req.method === "GET" && pathParts.length === 3 && pathParts[0] === "repos" && pathParts[2] === "compare") {
+      const repoId = pathParts[1];
+      return await handleCompareBranches(req, repoId, userId);
+    }
+
     // GET /repos/:repoId/tree
     if (req.method === "GET" && pathParts.length === 3 && pathParts[0] === "repos" && pathParts[2] === "tree") {
       const repoId = pathParts[1];
@@ -195,6 +201,65 @@ async function handleGetBranches(req: Request, repoId: string, userId: string) {
     console.error("Error fetching branches:", error);
     return new Response(
       JSON.stringify({ error: "Failed to fetch branches" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}
+
+/**
+ * GET /repos/:repoId/compare - Compara duas branches e retorna commits
+ */
+async function handleCompareBranches(req: Request, repoId: string, userId: string) {
+  const url = new URL(req.url);
+  const base = url.searchParams.get("base");
+  const head = url.searchParams.get("head");
+
+  if (!base || !head) {
+    return new Response(
+      JSON.stringify({ error: "base and head parameters are required" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const clientData = await getGitHubClientForRepo(repoId);
+  if (!clientData) {
+    return new Response(
+      JSON.stringify({ error: "Repository or connection not found" }),
+      { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const { octokit, repo } = clientData;
+  const [owner, repoName] = repo.full_name.split("/");
+
+  try {
+    // Comparar branches usando GitHub API
+    const { data: comparison } = await octokit.repos.compareCommits({
+      owner,
+      repo: repoName,
+      base,
+      head,
+    });
+
+    const commits = (comparison.commits || []).map((commit: any) => ({
+      sha: commit.sha,
+      message: commit.commit.message,
+      author: commit.commit.author?.name || "",
+      date: commit.commit.author?.date || "",
+    }));
+
+    return new Response(
+      JSON.stringify({ 
+        commits,
+        ahead_by: comparison.ahead_by || 0,
+        behind_by: comparison.behind_by || 0,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: any) {
+    console.error("Error comparing branches:", error);
+    return new Response(
+      JSON.stringify({ error: error.message || "Failed to compare branches" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

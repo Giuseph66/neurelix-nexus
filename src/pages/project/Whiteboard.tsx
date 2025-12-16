@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Plus, MoreVertical, Trash2, Loader2, MessageCircle, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,8 +28,9 @@ import { useWhiteboardPresence } from "@/hooks/useWhiteboardPresence";
 import { useWhiteboardBranches } from "@/hooks/useWhiteboardBranches";
 import { useWhiteboardComments } from "@/hooks/useWhiteboardComments";
 import { useMentions } from "@/hooks/useMentions";
-import { FabricObject, IText, Rect } from "fabric";
+import { FabricObject, IText, Rect, Canvas as FabricCanvas } from "fabric";
 import { Badge } from "@/components/ui/badge";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 export default function Whiteboard() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -67,10 +70,34 @@ export default function Whiteboard() {
     whiteboardId: selectedWhiteboardId || undefined 
   });
 
-  // Real-time collaboration
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
+  usePageTitle("Quadro Branco", project?.name);
+
+  // Real-time collaboration - use a stable ref to prevent re-subscriptions
+  const canvasInstanceRef = useRef<FabricCanvas | null>(null);
+  
+  useEffect(() => {
+    canvasInstanceRef.current = canvasRef.current?.getCanvas() ?? null;
+  }, [selectedWhiteboardId, loading]);
+
   const { saveObjectsRealtime } = useRealtimeWhiteboard({
     whiteboardId: selectedWhiteboardId,
-    canvas: canvasRef.current?.getCanvas() ?? null,
+    canvas: canvasInstanceRef.current,
     enabled: !!selectedWhiteboardId && !loading,
   });
 
@@ -133,7 +160,7 @@ export default function Whiteboard() {
     } else {
       setBranches([]);
     }
-  }, [selectedWhiteboardId, whiteboard?.parent_branch_id, getBranches]);
+  }, [selectedWhiteboardId, whiteboard?.parent_branch_id]);
 
   const handleCreateWhiteboard = async () => {
     if (!newBoardName.trim()) return;
@@ -149,9 +176,12 @@ export default function Whiteboard() {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveObjects(objects);
-      saveObjectsRealtime(objects);
+      // Only call realtime save if enabled
+      if (selectedWhiteboardId && !loading) {
+        saveObjectsRealtime(objects);
+      }
     }, 1000);
-  }, [saveObjects, saveObjectsRealtime]);
+  }, [saveObjects, saveObjectsRealtime, selectedWhiteboardId, loading]);
 
   const handleViewportChange = useCallback((viewport: CanvasViewport) => {
     setZoom(viewport.zoom);

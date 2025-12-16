@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { processAutoLink } from "../_shared/auto-link.ts";
+import { updateTarefaStatusFromPR, updateTarefaStatusOnPRApproved } from "../_shared/tarefa-status.ts";
 import { logAuditEvent } from "../_shared/audit.ts";
 
 const corsHeaders = {
@@ -285,6 +286,11 @@ async function handlePullRequestEvent(payload: any) {
       prRecord.id,
       { branchName: pr.head.ref, prNumber: pr.number }
     );
+
+    // Update tarefa status based on PR state
+    if (action === "opened" || action === "closed" || action === "reopened") {
+      await updateTarefaStatusFromPR(prRecord.id, prState, repo.project_id);
+    }
   }
 }
 
@@ -338,5 +344,10 @@ async function handlePullRequestReviewEvent(payload: any) {
         onConflict: "pr_id,reviewer_username",
       }
     );
+
+  // Update tarefa status if PR is approved
+  if (reviewState === "APPROVED") {
+    await updateTarefaStatusOnPRApproved(prRecord.id, repo.project_id);
+  }
 }
 

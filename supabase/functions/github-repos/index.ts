@@ -382,8 +382,24 @@ async function handleGetSelectedRepos(req: Request, userId: string) {
     );
   }
 
+  // Adicionar contador de PRs abertos para cada repo
+  const reposWithCounts = await Promise.all(
+    (repos || []).map(async (repo) => {
+      const { count } = await supabase
+        .from("pull_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("repo_id", repo.id)
+        .eq("state", "OPEN");
+
+      return {
+        ...repo,
+        open_prs_count: count || 0,
+      };
+    })
+  );
+
   return new Response(
-    JSON.stringify({ repos: repos || [] }),
+    JSON.stringify({ repos: reposWithCounts }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }

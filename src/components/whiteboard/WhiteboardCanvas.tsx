@@ -161,6 +161,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasRef, WhiteboardCanvas
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const tempShapeRef = useRef<FabricObject | null>(null);
   const clipboardRef = useRef<FabricObject[]>([]);
+  const objectsLoadedRef = useRef(false);
+  const initialObjectsRef = useRef<string>('');
+  const whiteboardIdRef = useRef<string>('');
   
   const { saveState, undo, redo, canUndo, canRedo } = useWhiteboardHistory();
 
@@ -169,9 +172,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasRef, WhiteboardCanvas
     onCanRedoChange(canRedo);
   }, [canUndo, canRedo, onCanUndoChange, onCanRedoChange]);
 
-  // Initialize canvas
+  // Initialize canvas - ONLY ONCE
   useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return;
+    if (!canvasRef.current || !containerRef.current || fabricRef.current) return;
 
     const container = containerRef.current;
     const canvas = new FabricCanvas(canvasRef.current, {
@@ -209,25 +212,6 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasRef, WhiteboardCanvas
       });
     }
 
-    // Load initial objects from database
-    if (initialObjects && initialObjects.length > 0) {
-      console.log('[Canvas] Loading', initialObjects.length, 'initial objects');
-      const jsonObjects = initialObjects.map(obj => obj.properties);
-      canvas.loadFromJSON({ 
-        objects: jsonObjects,
-        background: "#1e293b"
-      }).then(() => {
-        canvas.renderAll();
-        // Save initial state after loading
-        saveState(JSON.stringify(canvas.toJSON()));
-      });
-    } else {
-      // Save initial state
-      setTimeout(() => {
-        saveState(JSON.stringify(canvas.toJSON()));
-      }, 100);
-    }
-
     const saveAndNotify = () => {
       onObjectsChange(canvas.getObjects());
       saveState(JSON.stringify(canvas.toJSON()));
@@ -249,11 +233,67 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasRef, WhiteboardCanvas
       onSelectionChange(null);
     });
 
+    // Save initial empty state
+    setTimeout(() => {
+      saveState(JSON.stringify(canvas.toJSON()));
+    }, 100);
+
     return () => {
       resizeObserver.disconnect();
       canvas.dispose();
+      fabricRef.current = null;
+      objectsLoadedRef.current = false;
     };
-  }, [initialObjects]);
+  }, []); // Only run once on mount
+
+  // Load initial objects - separate effect to prevent recreation
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    // Create a stable key from initialObjects to detect actual changes
+    // Use whiteboard_id from first object to detect whiteboard changes
+    const currentWhiteboardId = initialObjects.length > 0 && initialObjects[0].whiteboard_id 
+      ? initialObjects[0].whiteboard_id 
+      : 'empty';
+    const objectsKey = JSON.stringify(initialObjects.map(obj => obj.properties));
+    
+    // Detect if whiteboard changed
+    if (currentWhiteboardId !== whiteboardIdRef.current) {
+      // Whiteboard changed, reset loaded flag
+      objectsLoadedRef.current = false;
+      whiteboardIdRef.current = currentWhiteboardId;
+    }
+    
+    // Only load if objects actually changed and haven't been loaded yet
+    if (objectsKey === initialObjectsRef.current && objectsLoadedRef.current) {
+      return;
+    }
+    initialObjectsRef.current = objectsKey;
+
+    // Load initial objects from database
+    if (initialObjects && initialObjects.length > 0) {
+      console.log('[Canvas] Loading', initialObjects.length, 'initial objects');
+      const jsonObjects = initialObjects.map(obj => obj.properties);
+      
+      // Clear canvas first
+      canvas.clear();
+      canvas.backgroundColor = "#1e293b";
+      
+      canvas.loadFromJSON({ 
+        objects: jsonObjects,
+        background: "#1e293b"
+      }).then(() => {
+        canvas.renderAll();
+        // Save initial state after loading
+        saveState(JSON.stringify(canvas.toJSON()));
+        objectsLoadedRef.current = true;
+      });
+    } else if (!objectsLoadedRef.current) {
+      // Only mark as loaded if we haven't loaded yet
+      objectsLoadedRef.current = true;
+    }
+  }, [initialObjects, saveState]);
 
   // Update brush settings
   useEffect(() => {

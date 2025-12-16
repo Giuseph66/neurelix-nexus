@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Loader2, MoreHorizontal, UserMinus, Shield } from "lucide-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 type AppRole = "admin" | "tech_lead" | "developer" | "viewer";
 
@@ -80,6 +81,22 @@ export default function Team() {
     enabled: !!projectId && !!user,
   });
 
+  const { data: project } = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", projectId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
   const { data: members, isLoading } = useQuery({
     queryKey: ["project-members", projectId],
     queryFn: async () => {
@@ -108,6 +125,8 @@ export default function Team() {
     },
     enabled: !!projectId,
   });
+
+  usePageTitle("Equipe", project?.name);
 
   const updateRoleMutation = useMutation({
     mutationFn: async ({ memberId, newRole }: { memberId: string; newRole: AppRole }) => {

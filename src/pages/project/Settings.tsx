@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2 } from "lucide-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 type AppRole = "admin" | "tech_lead" | "developer" | "viewer";
 
@@ -69,6 +70,8 @@ export default function Settings() {
     },
     enabled: !!projectId,
   });
+
+  usePageTitle("Configurações", project?.name);
 
   const updateProjectMutation = useMutation({
     mutationFn: async ({ name, description }: { name: string; description: string }) => {

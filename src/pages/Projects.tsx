@@ -20,6 +20,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, FolderOpen, Loader2, Calendar, Users } from "lucide-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 interface Project {
   id: string;
@@ -107,6 +108,8 @@ export default function Projects() {
       });
     },
   });
+
+  usePageTitle("Projetos");
 
   useEffect(() => {
     if (!loading && !user) {

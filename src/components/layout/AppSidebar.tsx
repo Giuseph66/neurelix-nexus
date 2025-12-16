@@ -72,9 +72,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Boxes className="h-5 w-5 text-sidebar-primary-foreground" />
-          </div>
+            <img src="/logo.png" alt="NEURELIX NEXUS" className="h-12 w-12 object-contain " />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-sidebar-foreground">

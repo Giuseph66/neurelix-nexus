@@ -199,8 +199,8 @@ export interface SubmitReviewInput {
 }
 
 export interface MergePRInput {
-  method: MergeMethod;
-  closeTarefaOnMerge?: boolean;
+  method?: MergeMethod;
+  commit_message?: string;
 }
 
 export interface LinkTarefaInput {

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, PenTool, ListTodo, GitBranch, Users } from "lucide-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 export default function Dashboard() {
   const { projectId } = useParams();
@@ -21,6 +22,8 @@ export default function Dashboard() {
     },
     enabled: !!projectId,
   });
+
+  usePageTitle("Dashboard", project?.name);
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ["project-members", projectId],

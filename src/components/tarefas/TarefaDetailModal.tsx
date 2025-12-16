@@ -40,6 +40,7 @@ import {
 import { useTarefaGitLinks } from '@/hooks/useTarefaGitLinks';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 
 interface TarefaDetailModalProps {
   tarefaId: string | null;
@@ -47,6 +48,7 @@ interface TarefaDetailModalProps {
 }
 
 export function TarefaDetailModal({ tarefaId, onClose }: TarefaDetailModalProps) {
+  const navigate = useNavigate();
   const { data: tarefa, isLoading: tarefaLoading } = useTarefa(tarefaId || undefined);
   const { data: comments, isLoading: commentsLoading } = useTarefaComments(tarefaId || undefined);
   const { data: activity, isLoading: activityLoading } = useTarefaActivity(tarefaId || undefined);
@@ -245,17 +247,42 @@ export function TarefaDetailModal({ tarefaId, onClose }: TarefaDetailModalProps)
                                 </div>
                               )}
                             </div>
-                            {link.url && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(link.url!, '_blank')}
-                                className="shrink-0"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {link.pr && tarefa?.project_id && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    navigate(`/project/${tarefa.project_id}/code/repos/${link.repo?.id}/pull-requests/${link.pr?.number}`);
+                                    onClose();
+                                  }}
+                                  title="Abrir no módulo Código"
+                                >
+                                  <Code2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {link.url && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => window.open(link.url!, '_blank')}
+                                  title="Abrir no GitHub"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
+                          {link.pr && (
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <div className="text-xs text-muted-foreground">
+                                {link.pr.state === 'OPEN' && 'PR aberto'}
+                                {link.pr.state === 'MERGED' && 'PR mergeado'}
+                                {link.pr.state === 'CLOSED' && 'PR fechado'}
+                                {link.pr.state === 'MERGED' && ' - Tarefa será atualizada automaticamente'}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
